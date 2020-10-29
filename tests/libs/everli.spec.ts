@@ -23,60 +23,48 @@ describe('Everli', () => {
     });
   });
 
-  describe('Instance', () => {
-    let everli;
+  test('Instance', async () => {
+    const everli = new Everli({ email, password });
 
-    beforeEach(() => {
-      everli = new Everli({ email, password });
-    });
+    await expect(everli.login()).resolves.not.toBeDefined();
 
-    describe('Login', () => {
-      test('it should login correctly', async () => {
-        await expect(everli.login()).resolves.not.toBeDefined();
+    // @ts-ignore
+    expect(everli.id).toMatch(/^\d{10}$/);
+    // @ts-ignore
+    expect(everli.token).toMatch(/^\w{40}$/);
 
-        expect(everli.id).toMatch(/^\d{10}$/);
-        expect(everli.token).toMatch(/^\w{40}$/);
-      }, 30000);
+    await expect(everli.init()).resolves.not.toBeDefined();
 
-      test('it should not login correctly', async () => {
-        everli = new Everli({ email, password: 'foo' });
+    // @ts-ignore
+    expect(everli.location).toMatch(/^\w{5}$/);
 
-        await expect(everli.login()).rejects.toThrowError('Wrong credentials');
+    await expect(everli.getStores()).resolves.toBeDefined();
 
-        expect(everli.id).not.toBeDefined();
-        expect(everli.token).not.toBeDefined();
-      });
-    });
+    const stores = await everli.getStores();
 
-    describe('Init', () => {
-      test('it should init everything', async () => {
-        await expect(everli.init()).resolves.not.toBeDefined();
+    expect(stores).toBeInstanceOf(Array);
+    expect(stores.length).toBeGreaterThan(0);
+    expect(stores).toHaveProperty('0.id');
+    expect(stores).toHaveProperty('0.name');
+    expect(stores).toHaveProperty('0.image');
+    expect(stores).toHaveProperty('0.color');
+    expect(stores).toHaveProperty('0.type');
+    expect(stores).toHaveProperty('0.address');
+    expect(stores).toHaveProperty('0.province');
+    expect(stores).toHaveProperty('0.isNew');
+    expect(stores).toHaveProperty('0.city');
+    expect(stores).toHaveProperty('0.postalCode');
+    expect(stores).toHaveProperty('0.country');
+    expect(stores).toHaveProperty('0.area');
 
-        expect(everli.location).toMatch(/^\w{5}$/);
-      });
-    });
+    const store = stores[0];
+    await expect(everli.getAvailability(store)).resolves.toBeDefined();
 
-    describe('GetStores', () => {
-      test('it should return the stores', async () => {
-        await expect(everli.getStores()).resolves.toBeDefined();
-
-        const stores = await everli.getStores();
-
-        expect(stores).toBeInstanceOf(Array);
-        expect(stores.length).toBeGreaterThan(0);
-        expect(stores).toHaveProperty('0.id');
-        expect(stores).toHaveProperty('0.name');
-        expect(stores).toHaveProperty('0.image');
-        expect(stores).toHaveProperty('0.color');
-        expect(stores).toHaveProperty('0.type');
-        expect(stores).toHaveProperty('0.address');
-        expect(stores).toHaveProperty('0.province');
-        expect(stores).toHaveProperty('0.isNew');
-        expect(stores).toHaveProperty('0.city');
-        expect(stores).toHaveProperty('0.postalCode');
-        expect(stores).toHaveProperty('0.country');
-        expect(stores).toHaveProperty('0.area');
-      });
-    });
+    const availability = await everli.getAvailability(store);
+    expect(availability.length).toBeGreaterThan(0);
+    expect(availability).toHaveProperty('0.date');
+    expect(availability).toHaveProperty('0.slots');
+    expect(availability).toHaveProperty('0.slots.0.time');
+    expect(availability).toHaveProperty('0.slots.0.cost');
   });
 });

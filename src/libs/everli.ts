@@ -12,6 +12,7 @@ type EverliResponse = {
 
 export type EverliStore = {
   id: string;
+  locationId: string;
   name: string;
   image: string;
   color: string;
@@ -25,13 +26,18 @@ export type EverliStore = {
   area: string;
 };
 
+export type EverliAvailability = {
+  date: string;
+  slots: {
+    time: string;
+    cost: number;
+  }[];
+};
+
 export class Everli {
   private readonly email: string;
   private readonly password: string;
-  // @ts-ignore
-  private id: string;
   private token: string;
-  // @ts-ignore
   private location: string;
 
   static readonly BASE_URL: string = 'https://api.everli.com';
@@ -39,6 +45,7 @@ export class Everli {
   static readonly API_PATH_SIGNIN: string = '/user/api/v4/local/signin';
   static readonly API_PATH_INIT: string = '/sm/api/v3/init';
   static readonly API_PATH_STORES: string = '/sm/api/v3/locations/{LOCATION}/stores';
+  static readonly API_PATH_AVAILABILITY: string = '/sm/api/v3/locations/{LOCATION}/stores/{STORE}/availability';
 
   private readonly request: AxiosInstance;
 
@@ -98,7 +105,6 @@ export class Everli {
         throw new Error('Wrong credentials');
       });
 
-    this.id = data.data.user.user_id;
     this.token = data.data.user.auth_token;
   }
 
@@ -198,8 +204,9 @@ export class Everli {
 
     const { data } = await this.request.get<GetStoresResponse>(Everli.API_PATH_STORES.replace('{LOCATION}', location || this.location));
 
-    const stores = data.data.body.map(storeGroups => storeGroups.list.map(store => ({
+    return data.data.body.map(storeGroups => storeGroups.list.map(store => ({
       id: store.id,
+      locationId: store.tracking?.[0].data.location_id,
       name: store.name,
       image: store.image,
       color: store.label?.[0].color,
@@ -212,7 +219,79 @@ export class Everli {
       country: store.tracking?.[0].data.store_country,
       area: store.tracking?.[0].data.store_area,
     }))).flat();
+  }
 
-    return stores;
+  async getAvailability(store: EverliStore): Promise<EverliAvailability[]> {
+    await this.login();
+
+    type GetAvailabilityResponse = EverliResponse & {
+      data: {
+        store_name: string;
+        title: string;
+        data: {
+          label: string; // "Tomorrow 30 October",
+          week_day: string; // "Tomorrow",
+          day: string; // "30 Oct.",
+          date: string; // "2020-10-30",
+          hours: {
+            label: string; // "Tomorrow, 09:00 - 10:00",
+            time_label: string; // "09:00 - 10:00",
+            price: string; // "4,90 €",
+            badge: null; // null,
+            valid: boolean; // true,
+            time: string; // "09:00:00",
+            cost: number; // 4.9,
+            variation: number; // 0,
+            tracking: {
+              event_name: "checkout_delivery_slot",
+              data: {
+                delivery_slot: string; // "2020-10-30 09:00:00",
+                cost: number; // 4.9,
+                variation: number; // 0,
+                currency: string; // "EUR"
+              }
+            }[];
+          }[];
+        }[];
+        tracking: {
+          event_name: "store_availability",
+          data: {
+            location_id: string; // "11392",
+            location_province: string; // "MI",
+            location_operating_province: string; // "MI",
+            location_postal_code: string; // "20143",
+            location_country: string; // "ITA",
+            location_area: string; // "MI6",
+            store_type: number; // 14,
+            store_brand: string; // "",
+            store_name: string; // "coop",
+            store_address: string; // "piazza fratelli cervi 11",
+            store_city: string; // "corsico",
+            store_province: string; // "MI",
+            store_postal_code: string; // "20094",
+            store_country: string; // "ITA",
+            store_label_text: string; // "Stessi prezzi del punto vendita",
+            store_new_flag: number; // 0,
+            store_store_id: string; // "3193",
+            store_location_id: string; // "11392",
+            store_area: string; // "MI6"
+          };
+        }[];
+      };
+    };
+
+    const { data } = await this.request.get<GetAvailabilityResponse>(Everli.API_PATH_AVAILABILITY
+      .replace('{LOCATION}', store.locationId)
+      .replace('{STORE}', store.id));
+
+    return data.data.data.map(day => ({
+      date: day.date,
+      slots: day.hours
+        .filter(hour => hour.valid)
+        .map(hour => ({
+          time: hour.time,
+          cost: hour.cost,
+        })),
+    }));
   }
 }
